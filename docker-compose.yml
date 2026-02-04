@@ -1,7 +1,7 @@
 services:
   grok2api:
     container_name: grok2api
-    image: ghcr.io/XTFG/grok2api:latest
+    image: ghcr.io/xtfg/grok2api:latest
     ports:
       - "8000:8000"
     environment:
