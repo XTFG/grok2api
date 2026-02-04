@@ -1,7 +1,7 @@
 services:
   grok2api:
     container_name: grok2api
-    image: ghcr.io/chenyme/grok2api:latest
+    image: ghcr.io/XTFG/grok2api:latest
     ports:
       - "8000:8000"
     environment:
@@ -10,8 +10,12 @@ services:
       SERVER_PORT: 8000
       SERVER_WORKERS: 1
       SERVER_STORAGE_TYPE: local
-      # SERVER_STORAGE_URL: 
 
+      # 自定义 API 地址（可选）
+      # CUSTOM_GROK_URL: https://your-grok-proxy.example.com
+      # CUSTOM_ASSETS_URL: https://your-assets-proxy.example.com
+
+      # SERVER_STORAGE_URL: 
       # SERVER_STORAGE_TYPE: (local, redis, mysql, pgsql) default: local
       # SERVER_STORAGE_URL: (local mode is empty) default: empty
       #   Redis: redis://localhost:6379/0 or redis://:password@localhost:6379/0
