@@ -7,11 +7,7 @@ set -eu
 
 if [ -n "${CUSTOM_GROK_URL:-}" ]; then
     echo "正在替换 grok.com 为: $CUSTOM_GROK_URL"
-    # 仅替换 API 端点 URL，排除 Origin 和 Referer 行
-    find /app -name "*.py" -type f -exec sed -i \
-        -e '/[Oo]rigin/!{/[Rr]eferer/!s|https://grok.com/|'"${CUSTOM_GROK_URL}"'/|g}' \
-        -e '/[Oo]rigin/!{/[Rr]eferer/!s|"https://grok.com"|"'"${CUSTOM_GROK_URL}"'"|g}' \
-        {} \;
+    find /app -name "*.py" -type f -exec sed -i "s|https://grok.com|${CUSTOM_GROK_URL}|g" {} \;
 fi
 
 if [ -n "${CUSTOM_ASSETS_URL:-}" ]; then
