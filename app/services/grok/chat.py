@@ -215,19 +215,25 @@ class ChatRequestBuilder:
             mode: 模型模式
             think: 是否开启思考
             file_attachments: 文件附件 ID 列表
-            image_attachments: 图片附件 URL 列表
+            image_attachments: 图片附件 ID 列表（合并到 fileAttachments）
         """
         temporary = get_config("grok.temporary", True)
         if think is None:
             think = get_config("grok.thinking", False)
+
+        merged_attachments: List[str] = []
+        if file_attachments:
+            merged_attachments.extend(file_attachments)
+        if image_attachments:
+            merged_attachments.extend(image_attachments)
 
         return {
             "temporary": temporary,
             "modelName": model,
             "modelMode": mode,
             "message": message,
-            "fileAttachments": file_attachments or [],
-            "imageAttachments": image_attachments or [],
+            "fileAttachments": merged_attachments,
+            "imageAttachments": [],
             "disableSearch": False,
             "enableImageGeneration": True,
             "returnImageBytes": False,
@@ -329,7 +335,7 @@ class GrokChatService:
                     try:
                         content = await response.text()
                         content = content[:1000]  # 限制长度避免日志过大
-                    except:
+                    except Exception:
                         content = "Unable to read response content"
 
                     logger.error(
@@ -342,7 +348,7 @@ class GrokChatService:
                     # 关闭 session 并抛出异常
                     try:
                         await session.close()
-                    except:
+                    except Exception:
                         pass
                     raise UpstreamException(
                         message=f"Grok API request failed: {response.status_code}",
@@ -360,7 +366,7 @@ class GrokChatService:
                 logger.error(f"Chat request error: {e}")
                 try:
                     await session.close()
-                except:
+                except Exception:
                     pass
                 raise UpstreamException(
                     message=f"Chat connection failed: {str(e)}",
@@ -413,7 +419,6 @@ class GrokChatService:
 
         # 处理附件上传
         file_ids = []
-        image_ids = []
 
         if attachments:
             upload_service = UploadService()
@@ -423,11 +428,9 @@ class GrokChatService:
                     file_id, _ = await upload_service.upload(attach_data, token)
 
                     if attach_type == "image":
-                        # 图片 imageAttachments
-                        image_ids.append(file_id)
+                        file_ids.append(file_id)
                         logger.debug(f"Image uploaded: {file_id}")
                     else:
-                        # 文件 fileAttachments
                         file_ids.append(file_id)
                         logger.debug(f"File uploaded: {file_id}")
             finally:
@@ -452,7 +455,7 @@ class GrokChatService:
             think,
             stream,
             file_attachments=file_ids,
-            image_attachments=image_ids,
+            image_attachments=[],
         )
 
         return response, stream, request.model
@@ -475,24 +478,27 @@ class ChatService:
             token: Token 字符串
             model: 模型名称
         """
+        success = False
         try:
             async for chunk in stream:
                 yield chunk
+            success = True
         finally:
-            # 无论成功完成还是客户端断开，都记录使用
-            try:
-                model_info = ModelService.get(model)
-                effort = (
-                    EffortType.HIGH
-                    if (model_info and model_info.cost.value == "high")
-                    else EffortType.LOW
-                )
-                await token_mgr.consume(token, effort)
-                logger.debug(
-                    f"Stream completed, recorded usage for token {token[:10]}... (effort={effort.value})"
-                )
-            except Exception as e:
-                logger.warning(f"Failed to record stream usage: {e}")
+            # 只在成功完成时记录使用，失败/异常时不扣费
+            if success:
+                try:
+                    model_info = ModelService.get(model)
+                    effort = (
+                        EffortType.HIGH
+                        if (model_info and model_info.cost.value == "high")
+                        else EffortType.LOW
+                    )
+                    await token_mgr.consume(token, effort)
+                    logger.debug(
+                        f"Stream completed, recorded usage for token {token[:10]}... (effort={effort.value})"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to record stream usage: {e}")
 
     @staticmethod
     async def completions(
@@ -517,8 +523,11 @@ class ChatService:
         try:
             token_mgr = await get_token_manager()
             await token_mgr.reload_if_stale()
-            pool_name = ModelService.pool_for_model(model)
-            token = token_mgr.get_token(pool_name)
+            token = None
+            for pool_name in ModelService.pool_candidates_for_model(model):
+                token = token_mgr.get_token(pool_name)
+                if token:
+                    break
         except Exception as e:
             logger.error(f"Failed to get token: {e}")
             raise AppException(

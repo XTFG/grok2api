@@ -177,7 +177,7 @@ class VideoService:
         post_id: str,
         aspect_ratio: str = "3:2",
         video_length: int = 6,
-        resolution: str = "SD",
+        resolution_name: str = "480p",
         preset: str = "normal",
     ) -> dict:
         """构建视频生成载荷"""
@@ -190,7 +190,12 @@ class VideoService:
             mode_flag = "--mode=extremely-spicy-or-crazy"
 
         full_prompt = f"{prompt} {mode_flag}"
-
+        video_gen_config = {
+            "parentPostId": post_id,
+            "aspectRatio": aspect_ratio,
+            "videoLength": video_length,
+            "resolutionName": resolution_name,
+        }
         return {
             "temporary": True,
             "modelName": "grok-3",
@@ -201,12 +206,7 @@ class VideoService:
                 "experiments": [],
                 "modelConfigOverride": {
                     "modelMap": {
-                        "videoGenModelConfig": {
-                            "parentPostId": post_id,
-                            "aspectRatio": aspect_ratio,
-                            "videoLength": video_length,
-                            "videoResolution": resolution,
-                        }
+                        "videoGenModelConfig": video_gen_config
                     }
                 },
             },
@@ -218,7 +218,7 @@ class VideoService:
         prompt: str,
         aspect_ratio: str = "3:2",
         video_length: int = 6,
-        resolution: str = "SD",
+        resolution_name: str = "480p",
         stream: bool = True,
         preset: str = "normal",
     ) -> AsyncGenerator[bytes, None]:
@@ -230,7 +230,7 @@ class VideoService:
             prompt: 视频描述
             aspect_ratio: 宽高比
             video_length: 视频时长
-            resolution: 分辨率
+            resolution_name: 分辨率
             stream: 是否流式
             preset: 预设
 
@@ -249,7 +249,7 @@ class VideoService:
                 # Step 2: 建立连接
                 headers = self._build_headers(token)
                 payload = self._build_payload(
-                    prompt, post_id, aspect_ratio, video_length, resolution, preset
+                    prompt, post_id, aspect_ratio, video_length, resolution_name, preset
                 )
 
                 session = AsyncSession(impersonate=BROWSER)
@@ -266,7 +266,7 @@ class VideoService:
                     logger.error(f"Video generation failed: {response.status_code}")
                     try:
                         await session.close()
-                    except:
+                    except Exception:
                         pass
                     raise UpstreamException(
                         message=f"Video generation failed: {response.status_code}",
@@ -288,7 +288,7 @@ class VideoService:
                 if session:
                     try:
                         await session.close()
-                    except:
+                    except Exception:
                         pass
                 logger.error(f"Video generation error: {e}")
                 if isinstance(e, AppException):
@@ -302,7 +302,7 @@ class VideoService:
         image_url: str,
         aspect_ratio: str = "3:2",
         video_length: int = 6,
-        resolution: str = "SD",
+        resolution: str = "480p",
         stream: bool = True,
         preset: str = "normal",
     ) -> AsyncGenerator[bytes, None]:
@@ -348,7 +348,7 @@ class VideoService:
                     logger.error(f"Video from image failed: {response.status_code}")
                     try:
                         await session.close()
-                    except:
+                    except Exception:
                         pass
                     raise UpstreamException(
                         message=f"Video from image failed: {response.status_code}",
@@ -370,7 +370,7 @@ class VideoService:
                 if session:
                     try:
                         await session.close()
-                    except:
+                    except Exception:
                         pass
                 logger.error(f"Video from image error: {e}")
                 if isinstance(e, AppException):
@@ -388,23 +388,27 @@ class VideoService:
             token: Token 字符串
             model: 模型名称
         """
+        success = False
         try:
             async for chunk in stream:
                 yield chunk
+            success = True
         finally:
-            try:
-                model_info = ModelService.get(model)
-                effort = (
-                    EffortType.HIGH
-                    if (model_info and model_info.cost.value == "high")
-                    else EffortType.LOW
-                )
-                await token_mgr.consume(token, effort)
-                logger.debug(
-                    f"Video stream completed, recorded usage for token {token[:10]}... (effort={effort.value})"
-                )
-            except Exception as e:
-                logger.warning(f"Failed to record video stream usage: {e}")
+            # 只在成功完成时记录使用，失败/异常时不扣费
+            if success:
+                try:
+                    model_info = ModelService.get(model)
+                    effort = (
+                        EffortType.HIGH
+                        if (model_info and model_info.cost.value == "high")
+                        else EffortType.LOW
+                    )
+                    await token_mgr.consume(token, effort)
+                    logger.debug(
+                        f"Video stream completed, recorded usage for token {token[:10]}... (effort={effort.value})"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to record video stream usage: {e}")
 
     @staticmethod
     async def completions(
@@ -414,7 +418,7 @@ class VideoService:
         thinking: str = None,
         aspect_ratio: str = "3:2",
         video_length: int = 6,
-        resolution: str = "SD",
+        resolution: str = "480p",
         preset: str = "normal",
     ):
         """
@@ -437,8 +441,11 @@ class VideoService:
         try:
             token_mgr = await get_token_manager()
             await token_mgr.reload_if_stale()
-            pool_name = ModelService.pool_for_model(model)
-            token = token_mgr.get_token(pool_name)
+            token = None
+            for pool_name in ModelService.pool_candidates_for_model(model):
+                token = token_mgr.get_token(pool_name)
+                if token:
+                    break
         except Exception as e:
             logger.error(f"Failed to get token: {e}")
             raise AppException(

@@ -10,17 +10,26 @@ asset_proxy_url = ""
 cf_clearance = ""
 max_retry = 3
 retry_status_codes = [401,429,403]
+# 重试退避配置
+retry_backoff_base = 0.5
+retry_backoff_factor = 2.0
+retry_backoff_max = 30.0
+retry_budget = 90.0
+# 流空闲超时配置 (秒)
+stream_idle_timeout = 45.0
+video_idle_timeout = 90.0
 
 [app]
 app_url = "http://127.0.0.1:8000"
 app_key = "grok2api"
 api_key = ""
 image_format = "url"
-video_format = "url"
+video_format = "html"
 
 [token]
 auto_refresh = true
 refresh_interval_hours = 8
+super_refresh_interval_hours = 2
 fail_threshold = 5
 save_delay_ms = 500
 reload_interval_sec = 30

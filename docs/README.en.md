@@ -52,7 +52,7 @@ Default password: `grok2api` (config key `app.app_key`, change it in production)
 ### Usage limits
 
 - Basic account: 80 requests / 20h
-- Super account: not tested by the author
+- Super account: 140 requests / 2h
 
 ### Models
 
@@ -99,8 +99,8 @@ curl http://localhost:8000/v1/chat/completions \
 | `thinking` | string | Thinking mode | `enabled`, `disabled`, `null` |
 | `video_config` | object | **Video model only** | - |
 | └─ `aspect_ratio` | string | Video aspect ratio | `16:9`, `9:16`, `1:1`, `2:3`, `3:2` |
-| └─ `video_length` | integer | Video length (seconds) | `5` - `15` |
-| └─ `resolution` | string | Resolution | `SD`, `HD` |
+| └─ `video_length` | integer | Video length (seconds) | `6`, `10` |
+| └─ `resolution_name` | string | Resolution | `480p`, `720p` |
 | └─ `preset` | string | Style preset | `fun`, `normal`, `spicy` |
 
 Note: any other parameters will be discarded and ignored.
@@ -154,10 +154,10 @@ Config file: `data/config.toml`
 | Module | Field | Key | Description | Default |
 | :--- | :--- | :--- | :--- | :--- |
 | **app** | `app_url` | App URL | External access URL for Grok2API (used for file links). | `http://127.0.0.1:8000` |
-| | `app_key` | Admin password | Password for the Grok2API admin panel. | `grok2api` |
-| | `api_key` | API key | Bearer token required to call Grok2API. | `""` |
+| | `app_key` | Admin password | Password for the Grok2API admin panel (required). | `grok2api` |
+| | `api_key` | API key | Token for calling Grok2API (optional). | `""` |
 | | `image_format` | Image format | Output image format (`url` or `base64`). | `url` |
-| | `video_format` | Video format | Output video format (url only). | `url` |
+| | `video_format` | Video format | Output video format (html tag or processed url). | `html` |
 | **grok** | `temporary` | Temporary chat | Enable temporary conversation mode. | `true` |
 | | `stream` | Streaming | Enable streaming by default. | `true` |
 | | `thinking` | Thinking chain | Enable model thinking output. | `true` |
@@ -169,8 +169,15 @@ Config file: `data/config.toml`
 | | `cf_clearance` | CF Clearance | Cloudflare clearance cookie for verification. | `""` |
 | | `max_retry` | Max retries | Max retries on Grok request failure. | `3` |
 | | `retry_status_codes` | Retry status codes | HTTP status codes that trigger retry. | `[401, 429, 403]` |
+| | `retry_backoff_base` | Backoff base | Base delay for retry backoff (seconds). | `0.5` |
+| | `retry_backoff_factor` | Backoff factor | Exponential multiplier for retry backoff. | `2.0` |
+| | `retry_backoff_max` | Backoff max | Max wait per retry (seconds). | `30.0` |
+| | `retry_budget` | Backoff budget | Max total retry time per request (seconds). | `90.0` |
+| | `stream_idle_timeout` | Stream idle timeout | Idle timeout for streaming responses (seconds). | `45.0` |
+| | `video_idle_timeout` | Video idle timeout | Idle timeout for video generation (seconds). | `90.0` |
 | **token** | `auto_refresh` | Auto refresh | Enable automatic token refresh. | `true` |
 | | `refresh_interval_hours` | Refresh interval | Token refresh interval (hours). | `8` |
+| | `super_refresh_interval_hours` | Super refresh interval | Super token refresh interval (hours). | `2` |
 | | `fail_threshold` | Failure threshold | Consecutive failures before a token is disabled. | `5` |
 | | `save_delay_ms` | Save delay | Debounced save delay for token changes (ms). | `500` |
 | | `reload_interval_sec` | Consistency refresh | Token state refresh interval in multi-worker setups (sec). | `30` |

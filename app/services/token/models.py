@@ -2,8 +2,9 @@
 Token 数据模型
 
 额度规则:
-- 新号默认 80 配额
-- 重置后恢复 80
+- Basic 新号默认 80 配额
+- Super 新号默认 140 配额
+- 重置后恢复默认值
 - lowEffort 扣 1，highEffort 扣 4
 """
 
@@ -14,7 +15,8 @@ from datetime import datetime
 
 
 # 默认配额
-DEFAULT_QUOTA = 80
+BASIC__DEFAULT_QUOTA = 80
+SUPER_DEFAULT_QUOTA = 140
 
 # 失败阈值
 FAIL_THRESHOLD = 5
@@ -47,7 +49,7 @@ class TokenInfo(BaseModel):
 
     token: str
     status: TokenStatus = TokenStatus.ACTIVE
-    quota: int = DEFAULT_QUOTA
+    quota: int = BASIC__DEFAULT_QUOTA
 
     # 统计
     created_at: int = Field(
@@ -90,13 +92,13 @@ class TokenInfo(BaseModel):
         self.use_count += actual_cost  # 使用 actual_cost 避免配额不足时过度计数
         self.quota = max(0, self.quota - actual_cost)
 
-        # 成功消耗后清空失败计数
-        self.fail_count = 0
-        self.last_fail_reason = None
+        # 注意：不在这里清零 fail_count，只有 record_success() 才清零
+        # 这样可以避免失败后调用 consume 导致失败计数被重置
 
         if self.quota == 0:
             self.status = TokenStatus.COOLING
-        elif self.status in [TokenStatus.COOLING, TokenStatus.EXPIRED]:
+        elif self.status == TokenStatus.COOLING:
+            # 只从 COOLING 恢复，不从 EXPIRED 恢复
             self.status = TokenStatus.ACTIVE
 
         return actual_cost
@@ -118,17 +120,18 @@ class TokenInfo(BaseModel):
         ]:
             self.status = TokenStatus.ACTIVE
 
-    def reset(self):
+    def reset(self, default_quota: Optional[int] = None):
         """重置配额到默认值"""
-        self.quota = DEFAULT_QUOTA
+        quota = BASIC__DEFAULT_QUOTA if default_quota is None else default_quota
+        self.quota = max(0, int(quota))
         self.status = TokenStatus.ACTIVE
         self.fail_count = 0
         self.last_fail_reason = None
 
     def record_fail(self, status_code: int = 401, reason: str = ""):
         """记录失败，达到阈值后自动标记为 expired"""
-        # 仅 401 错误才计入失败
-        if status_code != 401:
+        # 401/403 错误计入失败（都表示认证/授权失败）
+        if status_code not in (401, 403):
             return
 
         self.fail_count += 1
@@ -188,6 +191,7 @@ __all__ = [
     "TokenPoolStats",
     "EffortType",
     "EFFORT_COST",
-    "DEFAULT_QUOTA",
+    "BASIC__DEFAULT_QUOTA",
+    "SUPER_DEFAULT_QUOTA",
     "FAIL_THRESHOLD",
 ]
