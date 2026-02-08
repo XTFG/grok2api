@@ -38,6 +38,14 @@ class ImageService:
             return aiohttp.TCPConnector(ssl=self._ssl_context), None
 
         scheme = urlparse(proxy_url).scheme.lower()
+        if scheme == "socks5h":
+            # aiohttp_socks does not recognize socks5h; map to socks5 with remote DNS.
+            proxy_url = proxy_url.replace("socks5h://", "socks5://", 1)
+            logger.info(f"Using SOCKS proxy (rdns): {proxy_url}")
+            return (
+                ProxyConnector.from_url(proxy_url, ssl=self._ssl_context, rdns=True),
+                None,
+            )
         if scheme.startswith("socks"):
             logger.info(f"Using SOCKS proxy: {proxy_url}")
             return ProxyConnector.from_url(proxy_url, ssl=self._ssl_context), None
