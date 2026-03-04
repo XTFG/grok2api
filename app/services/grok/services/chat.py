@@ -113,27 +113,25 @@ def _format_web_search_sources(sources: list[dict[str, str]]) -> str:
     if not lines:
         return ""
 
-    return "\n## Sources\n\n" + "\n".join(lines) + "\n"
+    body = "\n".join(lines)
+    return (
+        "<details>\n"
+        "<summary>Sources</summary>\n\n"
+        f"{body}\n"
+        "</details>\n"
+    )
 
 
-def _inject_sources_into_think(content: str, sources_block: str) -> str:
+def _append_sources_to_content(content: str, sources_block: str) -> str:
     if not sources_block:
         return content
 
     text = content or ""
-    open_idx = text.find("<think>")
-    close_idx = text.find("</think>")
-
-    # Case 1: has complete <think>...</think>, insert right before first </think>.
-    if open_idx != -1 and close_idx != -1 and open_idx < close_idx:
-        return text[:close_idx] + sources_block + text[close_idx:]
-
-    # Case 2: has <think> but missing </think>, append sources and close it.
-    if open_idx != -1 and close_idx == -1:
-        return f"{text}{sources_block}</think>"
-
-    # Case 3: no think block, prepend a minimal one.
-    return f"<think>{sources_block}</think>\n{text}"
+    if not text:
+        return sources_block
+    if text.endswith("\n"):
+        return f"{text}\n{sources_block}"
+    return f"{text}\n\n{sources_block}"
 
 
 def _get_chat_semaphore() -> asyncio.Semaphore:
@@ -874,17 +872,8 @@ class StreamProcessor(proc_base.BaseProcessor):
                             self.think_opened = True
                     else:
                         if self.think_opened:
-                            if self._web_search_sources:
-                                yield self._sse(_format_web_search_sources(self._web_search_sources))
-                                self._web_search_sources = []
                             yield self._sse("\n</think>\n")
                             self.think_opened = False
-                        elif self._web_search_sources:
-                            # show_think=False: create minimal think block for sources
-                            yield self._sse("<think>\n")
-                            yield self._sse(_format_web_search_sources(self._web_search_sources))
-                            self._web_search_sources = []
-                            yield self._sse("\n</think>\n")
 
                     if in_think:
                         yield self._sse(filtered)
@@ -901,15 +890,7 @@ class StreamProcessor(proc_base.BaseProcessor):
                     yield self._sse(filtered)
 
             if self.think_opened:
-                if self._web_search_sources:
-                    yield self._sse(_format_web_search_sources(self._web_search_sources))
-                    self._web_search_sources = []
                 yield self._sse("</think>\n")
-            elif self._web_search_sources:
-                yield self._sse("<think>\n")
-                yield self._sse(_format_web_search_sources(self._web_search_sources))
-                self._web_search_sources = []
-                yield self._sse("\n</think>\n")
 
             if self._tool_stream_enabled:
                 for kind, payload in self._flush_tool_stream():
@@ -917,6 +898,12 @@ class StreamProcessor(proc_base.BaseProcessor):
                         yield self._sse(payload)
                     elif kind == "tool":
                         yield self._sse(tool_calls=[payload])
+
+            if self._web_search_sources:
+                yield self._sse(_format_web_search_sources(self._web_search_sources))
+                self._web_search_sources = []
+
+            if self._tool_stream_enabled:
                 finish_reason = "tool_calls" if self._tool_calls_seen else "stop"
                 yield self._sse(finish=finish_reason)
             else:
@@ -1141,7 +1128,7 @@ class CollectProcessor(proc_base.BaseProcessor):
         if self._web_search_sources:
             sources_block = _format_web_search_sources(self._web_search_sources)
             self._web_search_sources = []
-            content = _inject_sources_into_think(content, sources_block)
+            content = _append_sources_to_content(content, sources_block)
 
         # Parse for tool calls if tools were provided
         finish_reason = "stop"
