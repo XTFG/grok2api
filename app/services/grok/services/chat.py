@@ -487,7 +487,7 @@ class ChatService:
 
                 # 非流式
                 logger.debug(f"Processing non-stream response: model={model}")
-                result = await CollectProcessor(model_name, token, show_think, tools=tools, tool_choice=tool_choice).process(response)
+                result = await CollectProcessor(model_name, token, tools=tools, tool_choice=tool_choice).process(response)
                 try:
                     model_info = ModelService.get(model)
                     effort = (
@@ -949,10 +949,9 @@ class StreamProcessor(proc_base.BaseProcessor):
 class CollectProcessor(proc_base.BaseProcessor):
     """Non-stream response processor."""
 
-    def __init__(self, model: str, token: str = "", show_think=None, tools: List[Dict[str, Any]] = None, tool_choice: Any = None):
+    def __init__(self, model: str, token: str = "", tools: List[Dict[str, Any]] = None, tool_choice: Any = None):
         super().__init__(model, token)
         self.filter_tags = get_config("app.filter_tags")
-        self.show_think = bool(show_think)
         self.tools = tools
         self.tool_choice = tool_choice
         self._web_search_sources_enabled = bool(get_config("app.web_search_sources"))
