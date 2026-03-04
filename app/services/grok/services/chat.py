@@ -96,31 +96,24 @@ def extract_tool_text(raw: str, rollout_id: str = "") -> str:
     return re.sub(r"<[^>]+>", "", raw, flags=re.DOTALL).strip()
 
 
-def _escape_source_value(val: str) -> str:
-    """Escape a value for safe embedding inside a JSON-like quoted string within <think> blocks."""
-    return (
-        val.replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("\n", "\\n")
-        .replace("\r", "\\r")
-        .replace("</think>", "<\\/think>")
-    )
-
-
 def _format_web_search_sources(sources: list[dict[str, str]]) -> str:
     if not sources:
         return ""
-    parts = []
+
+    lines: list[str] = []
     for s in sources:
-        url = _escape_source_value(s.get("url", ""))
-        title = _escape_source_value(s.get("title", ""))
-        parts.append(
-            '{\n'
-            f'                      "url": "{url}",\n'
-            f'                      "title": "{title}"\n'
-            '                  }'
-        )
-    return "\nsources(" + ",\n                  ".join(parts) + ")\n"
+        url = (s.get("url", "") or "").replace("\r", "").replace("\n", "").strip()
+        if not url:
+            continue
+        title = (s.get("title", "") or "").replace("\r", " ").replace("\n", " ").strip()
+        if not title:
+            title = url
+        lines.append(f"- [{title}]({url})")
+
+    if not lines:
+        return ""
+
+    return "\n## Sources\n\n" + "\n".join(lines) + "\n"
 
 
 def _inject_sources_into_think(content: str, sources_block: str) -> str:
