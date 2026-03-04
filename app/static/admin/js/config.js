@@ -50,7 +50,8 @@ const LOCALE_MAP = {
     "stream": { title: "流式响应", desc: "是否默认启用流式输出。" },
     "thinking": { title: "思维链", desc: "是否默认启用思维链输出。" },
     "dynamic_statsig": { title: "动态指纹", desc: "是否默认启用动态生成 Statsig 指纹。" },
-    "filter_tags": { title: "过滤标签", desc: "设置自动过滤 Grok 响应中的特殊标签。" }
+    "filter_tags": { title: "过滤标签", desc: "设置自动过滤 Grok 响应中的特殊标签。" },
+    "web_search_sources": { title: "搜索来源", desc: "对话时将 Grok 搜索来源（URL 和标题）注入到思考块中（默认关闭）。" }
   },
 
 

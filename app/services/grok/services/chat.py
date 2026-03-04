@@ -96,6 +96,53 @@ def extract_tool_text(raw: str, rollout_id: str = "") -> str:
     return re.sub(r"<[^>]+>", "", raw, flags=re.DOTALL).strip()
 
 
+def _escape_source_value(val: str) -> str:
+    """Escape a value for safe embedding inside a JSON-like quoted string within <think> blocks."""
+    return (
+        val.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("</think>", "<\\/think>")
+    )
+
+
+def _format_web_search_sources(sources: list[dict[str, str]]) -> str:
+    if not sources:
+        return ""
+    parts = []
+    for s in sources:
+        url = _escape_source_value(s.get("url", ""))
+        title = _escape_source_value(s.get("title", ""))
+        parts.append(
+            '{\n'
+            f'                      "url": "{url}",\n'
+            f'                      "title": "{title}"\n'
+            '                  }'
+        )
+    return "\nsources(" + ",\n                  ".join(parts) + ")\n"
+
+
+def _inject_sources_into_think(content: str, sources_block: str) -> str:
+    if not sources_block:
+        return content
+
+    text = content or ""
+    open_idx = text.find("<think>")
+    close_idx = text.find("</think>")
+
+    # Case 1: has complete <think>...</think>, insert right before first </think>.
+    if open_idx != -1 and close_idx != -1 and open_idx < close_idx:
+        return text[:close_idx] + sources_block + text[close_idx:]
+
+    # Case 2: has <think> but missing </think>, append sources and close it.
+    if open_idx != -1 and close_idx == -1:
+        return f"{text}{sources_block}</think>"
+
+    # Case 3: no think block, prepend a minimal one.
+    return f"<think>{sources_block}</think>\n{text}"
+
+
 def _get_chat_semaphore() -> asyncio.Semaphore:
     global _CHAT_SEMAPHORE, _CHAT_SEM_VALUE
     value = max(1, int(get_config("chat.concurrent")))
@@ -449,7 +496,7 @@ class ChatService:
 
                 # 非流式
                 logger.debug(f"Processing non-stream response: model={model}")
-                result = await CollectProcessor(model_name, token, tools=tools, tool_choice=tool_choice).process(response)
+                result = await CollectProcessor(model_name, token, show_think, tools=tools, tool_choice=tool_choice).process(response)
                 try:
                     model_info = ModelService.get(model)
                     effort = (
@@ -530,6 +577,10 @@ class StreamProcessor(proc_base.BaseProcessor):
         self._tool_partial = ""
         self._tool_calls_seen = False
         self._tool_call_index = 0
+
+        self._web_search_sources_enabled = bool(get_config("app.web_search_sources"))
+        self._web_search_sources: list[dict[str, str]] = []
+        self._web_search_seen_urls: set[str] = set()
 
     def _with_tool_index(self, tool_call: Any) -> Any:
         if not isinstance(tool_call, dict):
@@ -748,6 +799,14 @@ class StreamProcessor(proc_base.BaseProcessor):
                 if rid := resp.get("rolloutId"):
                     self.rollout_id = str(rid)
 
+                if self._web_search_sources_enabled:
+                    ws = resp.get("webSearchResults")
+                    if isinstance(ws, dict):
+                        for r in ws.get("results") or []:
+                            if isinstance(r, dict) and r.get("url") and r["url"] not in self._web_search_seen_urls:
+                                self._web_search_seen_urls.add(r["url"])
+                                self._web_search_sources.append({"url": r["url"], "title": r.get("title", "")})
+
                 if not self.role_sent:
                     yield self._sse(role="assistant")
                     self.role_sent = True
@@ -822,8 +881,17 @@ class StreamProcessor(proc_base.BaseProcessor):
                             self.think_opened = True
                     else:
                         if self.think_opened:
+                            if self._web_search_sources:
+                                yield self._sse(_format_web_search_sources(self._web_search_sources))
+                                self._web_search_sources = []
                             yield self._sse("\n</think>\n")
                             self.think_opened = False
+                        elif self._web_search_sources:
+                            # show_think=False: create minimal think block for sources
+                            yield self._sse("<think>\n")
+                            yield self._sse(_format_web_search_sources(self._web_search_sources))
+                            self._web_search_sources = []
+                            yield self._sse("\n</think>\n")
 
                     if in_think:
                         yield self._sse(filtered)
@@ -840,7 +908,15 @@ class StreamProcessor(proc_base.BaseProcessor):
                     yield self._sse(filtered)
 
             if self.think_opened:
+                if self._web_search_sources:
+                    yield self._sse(_format_web_search_sources(self._web_search_sources))
+                    self._web_search_sources = []
                 yield self._sse("</think>\n")
+            elif self._web_search_sources:
+                yield self._sse("<think>\n")
+                yield self._sse(_format_web_search_sources(self._web_search_sources))
+                self._web_search_sources = []
+                yield self._sse("\n</think>\n")
 
             if self._tool_stream_enabled:
                 for kind, payload in self._flush_tool_stream():
@@ -893,11 +969,15 @@ class StreamProcessor(proc_base.BaseProcessor):
 class CollectProcessor(proc_base.BaseProcessor):
     """Non-stream response processor."""
 
-    def __init__(self, model: str, token: str = "", tools: List[Dict[str, Any]] = None, tool_choice: Any = None):
+    def __init__(self, model: str, token: str = "", show_think=None, tools: List[Dict[str, Any]] = None, tool_choice: Any = None):
         super().__init__(model, token)
         self.filter_tags = get_config("app.filter_tags")
+        self.show_think = bool(show_think)
         self.tools = tools
         self.tool_choice = tool_choice
+        self._web_search_sources_enabled = bool(get_config("app.web_search_sources"))
+        self._web_search_sources: list[dict[str, str]] = []
+        self._web_search_seen_urls: set[str] = set()
 
     def _filter_content(self, content: str) -> str:
         """Filter special tags in content."""
@@ -959,6 +1039,14 @@ class CollectProcessor(proc_base.BaseProcessor):
                 if mr := resp.get("modelResponse"):
                     response_id = mr.get("responseId", "")
                     content = mr.get("message", "")
+
+                    if self._web_search_sources_enabled:
+                        ws_results = mr.get("webSearchResults")
+                        if isinstance(ws_results, list):
+                            for r in ws_results:
+                                if isinstance(r, dict) and r.get("url") and r["url"] not in self._web_search_seen_urls:
+                                    self._web_search_seen_urls.add(r["url"])
+                                    self._web_search_sources.append({"url": r["url"], "title": r.get("title", "")})
 
                     card_map: dict[str, tuple[str, str]] = {}
                     for raw in mr.get("cardAttachmentsJson") or []:
@@ -1056,6 +1144,11 @@ class CollectProcessor(proc_base.BaseProcessor):
             await self.close()
 
         content = self._filter_content(content)
+
+        if self._web_search_sources:
+            sources_block = _format_web_search_sources(self._web_search_sources)
+            self._web_search_sources = []
+            content = _inject_sources_into_think(content, sources_block)
 
         # Parse for tool calls if tools were provided
         finish_reason = "stop"
