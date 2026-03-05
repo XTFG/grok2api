@@ -111,6 +111,7 @@
     "sections": {
       "app": "应用设置",
       "proxy": "代理配置",
+      "endpoint": "接口地址替换",
       "retry": "重试策略",
       "chat": "对话配置",
       "video": "视频配置",
@@ -152,6 +153,9 @@
         "cf_clearance": {"title": "CF Clearance", "desc": "Cloudflare Clearance Cookie，用于绕过反爬虫验证。启用自动刷新时由系统自动管理。"},
         "browser": {"title": "浏览器指纹", "desc": "curl_cffi 浏览器指纹标识（如 chrome136）。启用自动刷新时由系统自动管理。"},
         "user_agent": {"title": "User-Agent", "desc": "HTTP 请求的 User-Agent 字符串。启用自动刷新时由系统自动管理。"}
+      },
+      "endpoint": {
+        "replace_map": {"title": "替换映射", "desc": "请求时按前缀替换 URL。建议保留键不变，仅修改值，支持 https://、wss://、ws:// 多地址映射。"}
       },
       "retry": {
         "max_retry": {"title": "最大重试次数", "desc": "请求 Grok 服务失败时的最大重试次数。"},

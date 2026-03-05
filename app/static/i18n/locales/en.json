@@ -111,6 +111,7 @@
     "sections": {
       "app": "App Settings",
       "proxy": "Proxy Config",
+      "endpoint": "Endpoint Rewrite",
       "retry": "Retry Strategy",
       "chat": "Chat Config",
       "video": "Video Config",
@@ -152,6 +153,9 @@
         "cf_clearance": {"title": "CF Clearance", "desc": "Cloudflare Clearance Cookie for bypassing anti-bot verification. Automatically managed when auto-refresh is enabled."},
         "browser": {"title": "Browser Fingerprint", "desc": "curl_cffi browser fingerprint identifier (e.g. chrome136). Automatically managed when auto-refresh is enabled."},
         "user_agent": {"title": "User-Agent", "desc": "HTTP request User-Agent string. Automatically managed when auto-refresh is enabled."}
+      },
+      "endpoint": {
+        "replace_map": {"title": "Rewrite Map", "desc": "Rewrite URL prefixes at request time. Keep the keys unchanged and edit only values. Supports https://, wss://, ws:// mappings."}
       },
       "retry": {
         "max_retry": {"title": "Max Retries", "desc": "Maximum number of retries when Grok service request fails."},

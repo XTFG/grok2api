@@ -14,6 +14,7 @@ from app.services.token.service import TokenService
 from app.services.reverse.utils.headers import build_headers, build_ws_headers
 from app.services.reverse.utils.retry import retry_on_status
 from app.services.reverse.utils.websocket import WebSocketClient, WebSocketConnection
+from app.services.reverse.utils.url_rewrite import rewrite_url
 
 LIVEKIT_TOKEN_API = "https://grok.com/rest/livekit/tokens"
 LIVEKIT_WS_URL = "wss://livekit.grok.com"
@@ -67,7 +68,7 @@ class LivekitTokenReverse:
                     }
                 ).decode(),
                 "requestAgentDispatch": False,
-                "livekitUrl": LIVEKIT_WS_URL,
+                "livekitUrl": rewrite_url(LIVEKIT_WS_URL),
                 "params": {"enable_markdown_transcript": "true"},
             }
 

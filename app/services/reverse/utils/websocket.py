@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from app.core.logger import logger
 from app.core.config import get_config
+from app.services.reverse.utils.url_rewrite import rewrite_headers, rewrite_url
 
 
 def _default_ssl_context() -> ssl.SSLContext:
@@ -111,6 +112,13 @@ class WebSocketClient:
         Returns:
             WebSocketConnection: The WebSocket connection.
         """
+        rewrite_before = url
+        url = rewrite_url(url)
+        if url != rewrite_before:
+            logger.debug(f"WebSocket URL rewritten: {rewrite_before} -> {url}")
+
+        rewritten_headers = rewrite_headers(headers) if headers is not None else None
+
         # Resolve proxy dynamically from config if not overridden
         proxy_url = self._proxy_override or get_config("proxy.base_proxy_url")
         connector, resolved_proxy = resolve_proxy(proxy_url, self._ssl_context)
@@ -137,7 +145,7 @@ class WebSocketClient:
                 try:
                     ws = await session.ws_connect(
                         url,
-                        headers=headers,
+                        headers=rewritten_headers,
                         proxy=resolved_proxy,
                         ssl=self._ssl_context,
                         proxy_ssl=proxy_ssl_context,
@@ -149,7 +157,7 @@ class WebSocketClient:
                     )
                     ws = await session.ws_connect(
                         url,
-                        headers=headers,
+                        headers=rewritten_headers,
                         proxy=resolved_proxy,
                         ssl=self._ssl_context,
                         **extra_kwargs,
@@ -157,7 +165,7 @@ class WebSocketClient:
             else:
                 ws = await session.ws_connect(
                     url,
-                    headers=headers,
+                    headers=rewritten_headers,
                     proxy=resolved_proxy,
                     ssl=self._ssl_context,
                     **extra_kwargs,

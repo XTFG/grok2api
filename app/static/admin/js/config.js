@@ -69,6 +69,11 @@ const LOCALE_MAP = {
     "user_agent": { title: "User-Agent", desc: "HTTP 请求的 User-Agent 字符串。启用自动刷新时由系统自动管理。" }
   },
 
+  "endpoint": {
+    "label": "接口地址替换",
+    "replace_map": { title: "替换映射", desc: "请求时按前缀替换 URL。建议保留键不变，仅修改值，支持 https://、wss://、ws:// 多地址映射。" }
+  },
+
 
   "retry": {
     "label": "重试策略",

@@ -56,6 +56,20 @@ browser = "chrome136"
 user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
 
 
+# ==================== 接口地址替换 ====================
+[endpoint]
+# 请求时 URL 替换映射（左侧为原地址前缀，右侧为目标地址前缀）
+# 支持 https:// / wss:// / ws://，按最长前缀优先匹配
+
+[endpoint.replace_map]
+"https://grok.com" = "https://grok.com"
+"https://assets.grok.com" = "https://assets.grok.com"
+"wss://grok.com" = "wss://grok.com"
+"wss://livekit.grok.com" = "wss://livekit.grok.com"
+"ws://grok.com" = "ws://grok.com"
+"ws://livekit.grok.com" = "ws://livekit.grok.com"
+
+
 # ==================== 重试策略 ====================
 [retry]
 # 最大重试次数

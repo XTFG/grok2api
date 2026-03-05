@@ -5,6 +5,7 @@ from app.core.auth import verify_public_key
 from app.core.exceptions import AppException
 from app.services.grok.services.voice import VoiceService
 from app.services.token.manager import get_token_manager
+from app.services.reverse.utils.url_rewrite import rewrite_url
 
 router = APIRouter()
 
@@ -59,7 +60,7 @@ async def public_voice_token(
 
         return VoiceTokenResponse(
             token=token,
-            url="wss://livekit.grok.com",
+            url=rewrite_url("wss://livekit.grok.com"),
             participant_name="",
             room_name="",
         )

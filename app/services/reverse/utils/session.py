@@ -10,6 +10,7 @@ from curl_cffi.const import CurlOpt
 
 from app.core.config import get_config
 from app.core.logger import logger
+from app.services.reverse.utils.url_rewrite import rewrite_headers, rewrite_url
 
 
 def _should_skip_proxy_ssl() -> bool:
@@ -69,18 +70,52 @@ class ResettableSession:
                 pass
             logger.debug("ResettableSession: session reset")
 
+    def _prepare_request_args(
+        self, args: tuple[Any, ...], kwargs: dict[str, Any]
+    ) -> tuple[tuple[Any, ...], dict[str, Any]]:
+        if args:
+            url = rewrite_url(args[0])
+            args = (url, *args[1:])
+        elif "url" in kwargs:
+            kwargs["url"] = rewrite_url(kwargs["url"])
+
+        headers = kwargs.get("headers")
+        if headers is not None:
+            kwargs["headers"] = rewrite_headers(headers)
+
+        return args, kwargs
+
     async def _request(self, method: str, *args: Any, **kwargs: Any):
         await self._maybe_reset()
-        response = await getattr(self._session, method)(*args, **kwargs)
+        prepared_args, prepared_kwargs = self._prepare_request_args(args, kwargs)
+        response = await self._session.request(method, *prepared_args, **prepared_kwargs)
         if self._reset_on_status and response.status_code in self._reset_on_status:
             self._reset_requested = True
         return response
 
+    async def request(self, method: str, *args: Any, **kwargs: Any):
+        return await self._request(method, *args, **kwargs)
+
     async def get(self, *args: Any, **kwargs: Any):
-        return await self._request("get", *args, **kwargs)
+        return await self.request("get", *args, **kwargs)
 
     async def post(self, *args: Any, **kwargs: Any):
-        return await self._request("post", *args, **kwargs)
+        return await self.request("post", *args, **kwargs)
+
+    async def delete(self, *args: Any, **kwargs: Any):
+        return await self.request("delete", *args, **kwargs)
+
+    async def put(self, *args: Any, **kwargs: Any):
+        return await self.request("put", *args, **kwargs)
+
+    async def patch(self, *args: Any, **kwargs: Any):
+        return await self.request("patch", *args, **kwargs)
+
+    async def head(self, *args: Any, **kwargs: Any):
+        return await self.request("head", *args, **kwargs)
+
+    async def options(self, *args: Any, **kwargs: Any):
+        return await self.request("options", *args, **kwargs)
 
     async def reset(self) -> None:
         self._reset_requested = True
