@@ -27,6 +27,7 @@ from contextlib import asynccontextmanager
 
 import orjson
 import aiofiles
+import tomli_w
 from app.core.logger import logger
 
 # 数据目录（支持通过环境变量覆盖）
@@ -50,6 +51,21 @@ def json_loads(obj: str | bytes) -> Any:
 
 def json_dumps_sorted(obj: Any) -> str:
     return orjson.dumps(obj, option=orjson.OPT_SORT_KEYS).decode("utf-8")
+
+
+def _normalize_toml_value(value: Any) -> Any:
+    """将任意 Python 值规整为 tomli_w 可序列化类型。"""
+    if isinstance(value, dict):
+        return {str(k): _normalize_toml_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_normalize_toml_value(v) for v in value]
+    if isinstance(value, tuple):
+        return [_normalize_toml_value(v) for v in value]
+    if value is None:
+        return "None"
+    if isinstance(value, (str, bool, int, float)):
+        return value
+    return str(value)
 
 
 class StorageError(Exception):
@@ -227,27 +243,15 @@ class LocalStorage(BaseStorage):
 
     async def save_config(self, data: Dict[str, Any]):
         try:
-            lines = []
+            normalized: Dict[str, Any] = {}
             for section, items in data.items():
                 if not isinstance(items, dict):
                     continue
-                lines.append(f"[{section}]")
-                for key, val in items.items():
-                    if isinstance(val, bool):
-                        val_str = "true" if val else "false"
-                    elif isinstance(val, str):
-                        # Use JSON string escaping to keep TOML valid for multiline/control chars.
-                        val_str = json_dumps(val)
-                    elif isinstance(val, (int, float)):
-                        val_str = str(val)
-                    elif isinstance(val, (list, dict)):
-                        val_str = json_dumps(val)
-                    else:
-                        val_str = f'"{str(val)}"'
-                    lines.append(f"{key} = {val_str}")
-                lines.append("")
+                normalized[str(section)] = _normalize_toml_value(items)
 
-            content = "\n".join(lines)
+            content = tomli_w.dumps(normalized)
+            # 写入前做一次 TOML 校验，避免落地损坏配置。
+            tomllib.loads(content)
 
             CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
             async with aiofiles.open(CONFIG_FILE, "w", encoding="utf-8") as f:
